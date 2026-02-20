@@ -2,14 +2,37 @@
 //
 // This module defines the core Event enum that represents different
 // lifecycle and runtime events in ZeroClaw that plugins can hook into.
+//
+// # Security Considerations
+//
+// Events may carry sensitive data including:
+// - User messages and content (MessageReceived)
+// - Tool inputs and outputs (ToolCallPre, ToolCallPost)
+// - LLM prompts and responses (LlmRequest)
+//
+// Plugin code receiving these events MUST NOT:
+// - Log raw event payloads without sanitization
+// - Expose event data to untrusted parties
+// - Store secrets without encryption
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::borrow::Cow;
 
+/// Core event types for JS plugin hook system
+///
+/// Events represent discrete lifecycle and runtime moments in ZeroClaw
+/// that plugins can observe and react to. Each event carries context
+/// specific to its type.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", content = "payload", rename_all = "kebab-case")]
 pub enum Event {
+    /// Message received from a channel
+    ///
+    /// # Security Considerations
+    /// - `message` may contain sensitive user data, PII, or secrets
+    /// - Plugin code MUST NOT log raw message content
+    /// - Consider sanitizing/redacting before logging or persisting
     MessageReceived {
         channel_id: String,
         channel_type: String,
@@ -17,18 +40,36 @@ pub enum Event {
         session_id: Option<String>,
     },
 
+    /// Tool execution about to occur
+    ///
+    /// # Security Considerations
+    /// - `input` may contain sensitive parameters or secrets
+    /// - Plugin code MUST NOT log raw tool inputs
+    /// - Consider sanitizing/redacting before logging or persisting
     ToolCallPre {
         tool_name: String,
         input: Value,
         session_id: Option<String>,
     },
 
+    /// Tool execution completed
+    ///
+    /// # Security Considerations
+    /// - `result` may contain sensitive output data or secrets
+    /// - Plugin code MUST NOT log raw tool outputs
+    /// - Consider sanitizing/redacting before logging or persisting
     ToolCallPost {
         tool_name: String,
         result: Value,
         session_id: Option<String>,
     },
 
+    /// LLM request being sent to provider
+    ///
+    /// # Security Considerations
+    /// - `messages` may contain sensitive prompts, PII, or secrets
+    /// - Plugin code MUST NOT log raw message content
+    /// - Consider sanitizing/redacting before logging or persisting
     LlmRequest {
         provider: String,
         model: String,
@@ -45,6 +86,12 @@ pub enum Event {
         config: Value,
     },
 
+    /// Custom plugin-defined event
+    ///
+    /// # Constraints
+    /// - `namespace`: must be non-empty, recommended format: `reverse.domain.name`
+    /// - `name`: must be non-empty, alphanumeric with underscores/hyphens
+    /// - `payload`: arbitrary JSON value
     Custom {
         namespace: String,
         name: String,
@@ -53,6 +100,10 @@ pub enum Event {
 }
 
 impl Event {
+    /// Returns the event name as a dotted string
+    ///
+    /// Used for event matching and hook registration.
+    /// Returns `Cow<str>` to avoid allocations for static names.
     pub fn name(&self) -> Cow<str> {
         match self {
             Event::MessageReceived { .. } => Cow::Borrowed("message.received"),
