@@ -62,6 +62,49 @@ impl ExecutionContext {
     pub fn to_value(&self) -> Value {
         serde_json::to_value(self).unwrap_or_else(|_| Value::Null)
     }
+
+    /// Generate JavaScript code to inject the global Zeroclaw object
+    ///
+    /// This creates a global `Zeroclaw` object with:
+    /// - `pluginId`: The ID of the current plugin
+    /// - `on(event, handler)`: Method to register event handlers
+    ///
+    /// # Arguments
+    ///
+    /// * `plugin_id` - The identifier for the current plugin
+    ///
+    /// # Returns
+    ///
+    /// JavaScript code that sets up the global Zeroclaw object
+    pub fn inject_zeroclaw_global(plugin_id: &str) -> String {
+        format!(
+            r#"
+// Inject global Zeroclaw object for plugin: {}
+globalThis.Zeroclaw = {{
+    // The unique identifier for this plugin
+    pluginId: "{}",
+
+    // Register an event handler
+    // Usage: Zeroclaw.on('event.name', (data) => {{ ... }})
+    on: function(eventName, handler) {{
+        if (typeof handler !== 'function') {{
+            throw new Error('Handler must be a function');
+        }}
+        // Store the handler for later execution
+        // The actual hook registration happens via the native bridge
+        if (!typeof globalThis.__zeroclaw_hooks === 'object') {{
+            globalThis.__zeroclaw_hooks = {{}};
+        }}
+        if (!globalThis.__zeroclaw_hooks[eventName]) {{
+            globalThis.__zeroclaw_hooks[eventName] = [];
+        }}
+        globalThis.__zeroclaw_hooks[eventName].push(handler);
+    }}
+}};
+"#,
+            plugin_id, plugin_id
+        )
+    }
 }
 
 #[cfg(test)]
@@ -102,5 +145,29 @@ mod tests {
         assert_eq!(value["session_id"], "session-123");
         assert_eq!(value["channel_type"], "telegram");
         assert_eq!(value["user_id"], "user-456");
+    }
+
+    #[test]
+    fn inject_zeroclaw_global_contains_plugin_id() {
+        let code = ExecutionContext::inject_zeroclaw_global("test-plugin");
+        assert!(code.contains("pluginId: \"test-plugin\""));
+    }
+
+    #[test]
+    fn inject_zeroclaw_global_creates_global_object() {
+        let code = ExecutionContext::inject_zeroclaw_global("my-plugin");
+        assert!(code.contains("globalThis.Zeroclaw"));
+    }
+
+    #[test]
+    fn inject_zeroclaw_global_has_on_method() {
+        let code = ExecutionContext::inject_zeroclaw_global("plugin-a");
+        assert!(code.contains("on: function"));
+    }
+
+    #[test]
+    fn inject_zeroclaw_global_validates_handler_is_function() {
+        let code = ExecutionContext::inject_zeroclaw_global("plugin-b");
+        assert!(code.contains("typeof handler !== 'function'"));
     }
 }

@@ -113,10 +113,14 @@ impl PluginSandbox {
         let id = PluginId(plugin_id.to_string());
         let filename = filename.unwrap_or("plugin.js");
 
-        // Load the plugin into the runtime pool
+        // Inject the global Zeroclaw object before loading the plugin code
+        let global_injection = context::ExecutionContext::inject_zeroclaw_global(plugin_id);
+        let injected_code = format!("{}\n{}", global_injection, code);
+
+        // Load the plugin into the runtime pool with injected globals
         let handle = self
             .pool
-            .load_plugin(id.clone(), code.to_string(), filename.to_string())
+            .load_plugin(id.clone(), injected_code, filename.to_string())
             .await?;
 
         Ok(SandboxPluginHandle {
