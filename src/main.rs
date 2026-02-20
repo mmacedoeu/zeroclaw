@@ -1034,6 +1034,11 @@ async fn main() -> Result<()> {
                 Ok(())
             }
         },
+
+        #[cfg(feature = "js")]
+        Commands::Plugin { plugin_command } => tokio::runtime::Runtime::new()
+            .unwrap()
+            .block_on(plugin_command.run()),
     }
 }
 

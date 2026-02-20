@@ -53,6 +53,13 @@ pub(crate) mod health;
 pub(crate) mod heartbeat;
 pub(crate) mod identity;
 pub(crate) mod integrations;
+#[cfg(any(
+    feature = "js",
+    feature = "js-lite",
+    feature = "js-runtime",
+    feature = "js-transpile"
+))]
+pub mod js;
 pub mod memory;
 pub(crate) mod migration;
 pub(crate) mod multimodal;

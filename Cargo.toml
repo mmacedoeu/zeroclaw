@@ -55,6 +55,13 @@ image = { version = "0.25", default-features = false, features = ["jpeg", "png"]
 
 # URL encoding for web search
 urlencoding = "2.1"
+# home directory resolution for CLI commands
+dirs = "5.0"
+# Archive extraction for plugin packages
+flate2 = "1.0"
+tar = "0.4"
+zip = "2.2"
+tempfile = "3.14"
 
 # Optional Rust-native browser automation backend
 fantoccini = { version = "0.22.0", optional = true, default-features = false, features = ["rustls-tls"] }
@@ -161,6 +168,20 @@ wa-rs-proto = { version = "0.2", optional = true, default-features = false }
 wa-rs-ureq-http = { version = "0.2", optional = true }
 wa-rs-tokio-transport = { version = "0.2", optional = true, default-features = false }
 
+# JS Plugin Support — optional feature flags
+# QuickJS runtime
+rquickjs = { version = "0.11", optional = true }
+# OXC transpiler — EXACT VERSION PIN (aggressive API churn)
+oxc_parser = { version = "=0.114.0", optional = true }
+oxc_transformer = { version = "=0.114.0", optional = true }
+oxc_codegen = { version = "=0.114.0", optional = true }
+oxc_allocator = { version = "=0.114.0", optional = true }
+oxc_span = { version = "=0.114.0", optional = true }
+# Source map support for error remapping
+sourcemap = { version = "8", optional = true }
+# esbuild detection for NPM bundling
+which = { version = "6", optional = true }
+
 # Raspberry Pi GPIO / Landlock (Linux only) — target-specific to avoid compile failure on macOS
 [target.'cfg(target_os = "linux")'.dependencies]
 rppal = { version = "0.22", optional = true }
@@ -178,6 +199,25 @@ channel-lark = ["dep:prost"]
 memory-postgres = ["dep:postgres"]
 observability-otel = ["dep:opentelemetry", "dep:opentelemetry_sdk", "dep:opentelemetry-otlp"]
 peripheral-rpi = ["rppal"]
+
+# JS Plugin Support — granular feature flags
+js-runtime = ["dep:rquickjs"]
+js-transpile = [
+    "dep:oxc_parser",
+    "dep:oxc_transformer",
+    "dep:oxc_codegen",
+    "dep:oxc_allocator",
+    "dep:oxc_span",
+    "dep:sourcemap",
+    # regex is already a required dependency
+]
+js-bundle = ["dep:which"]
+# js-registry doesn't need feature deps (sha2 and urlencoding are already required)
+js-registry = []
+# Convenience combos
+js = ["js-runtime", "js-transpile", "js-bundle", "js-registry"]
+js-lite = ["js-runtime", "js-transpile", "js-bundle", "js-registry"]
+
 # Browser backend feature alias used by cfg(feature = "browser-native")
 browser-native = ["dep:fantoccini"]
 # Backward-compatible alias for older invocations
