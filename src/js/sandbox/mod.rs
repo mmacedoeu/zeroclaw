@@ -74,7 +74,8 @@ pub struct PluginSandbox {
     /// This stores hook metadata (priorities, timeouts) without storing actual
     /// JavaScript functions. The actual Function<'js> values are managed by
     /// individual worker threads.
-    hook_metadata: Arc<std::sync::Mutex<HashMap<String, (usize, HashMap<String, Vec<HookHandlerRef>>)>>>,
+    hook_metadata:
+        Arc<std::sync::Mutex<HashMap<String, (usize, HashMap<String, Vec<HookHandlerRef>>)>>>,
 }
 
 impl PluginSandbox {
@@ -152,7 +153,10 @@ impl PluginSandbox {
     /// Returns a map of plugin_id -> (worker_id, event_name -> handlers).
     /// This contains hook metadata (priorities, timeouts) without the actual
     /// JavaScript functions, which are managed by worker threads.
-    pub fn hook_metadata(&self) -> &Arc<std::sync::Mutex<HashMap<String, (usize, HashMap<String, Vec<HookHandlerRef>>)>>> {
+    pub fn hook_metadata(
+        &self,
+    ) -> &Arc<std::sync::Mutex<HashMap<String, (usize, HashMap<String, Vec<HookHandlerRef>>)>>>
+    {
         &self.hook_metadata
     }
 }
@@ -248,7 +252,10 @@ mod tests {
     }
 
     #[tokio::test]
-    #[cfg(all(feature = "js-runtime", any(feature = "js", feature = "js-lite", feature = "js-transpile")))]
+    #[cfg(all(
+        feature = "js-runtime",
+        any(feature = "js", feature = "js-lite", feature = "js-transpile")
+    ))]
     async fn sandbox_register_source_map() {
         let sandbox = PluginSandbox::new(SandboxConfig::default()).unwrap();
 

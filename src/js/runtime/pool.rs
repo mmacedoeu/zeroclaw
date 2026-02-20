@@ -18,6 +18,9 @@ pub struct PluginId(pub String);
 ///
 /// QuickJS contexts are `!Send`, so each worker thread owns its own runtime.
 /// The pool manages multiple workers and assigns plugins to specific workers.
+///
+/// Hooks are stored per-worker in the global `__zeroclaw_hooks` object,
+/// which is accessed dynamically during hook execution.
 pub struct JsRuntimePool {
     workers: Arc<Mutex<Vec<mpsc::Sender<WorkerCommand>>>>,
     active_contexts: Arc<Mutex<HashMap<PluginId, usize>>>, // plugin_id -> worker_index

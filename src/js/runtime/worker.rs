@@ -1,8 +1,9 @@
 // Worker thread implementation for JS runtime
 
-use crate::js::{config::RuntimeConfig, error::JsRuntimeError};
 use crate::js::events::Event;
 use crate::js::hooks::{HookHandlerRef, HookResult};
+use crate::js::{config::RuntimeConfig, error::JsRuntimeError};
+use rquickjs::{Array, Ctx, Function, Object};
 use serde_json::Value;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -37,6 +38,10 @@ pub enum WorkerCommand {
 ///
 /// Each worker owns its own QuickJS Runtime and Context,
 /// which cannot be shared across threads due to `!Send` constraints.
+///
+/// Hooks are discovered from the global `__zeroclaw_hooks` object at
+/// execution time, since Function<'js> values have lifetimes tied to
+/// the runtime context.
 pub struct JsRuntimeWorker {
     id: usize,
     rx: mpsc::Receiver<WorkerCommand>,
@@ -137,10 +142,11 @@ fn run_worker_internal(id: usize, mut rx: mpsc::Receiver<WorkerCommand>, config:
             WorkerCommand::ExecuteHook {
                 event,
                 handlers,
-                timeout: _timeout,  // TODO: Apply per-handler timeout in Task 13
+                timeout,
                 reply,
             } => {
-                let result = ctx.with(|ctx| execute_hooks(&ctx, &event, handlers));
+                let result =
+                    ctx.with(|ctx| execute_hooks(&ctx, &event, handlers, timeout, &deadline));
                 if let Err(_) = reply.send(result) {
                     tracing::warn!("Failed to send hook execution result: receiver dropped");
                 }
@@ -230,23 +236,250 @@ fn simple_value_to_json<'js>(ctx: &rquickjs::Ctx<'js>, v: &rquickjs::Value<'js>)
     Value::Null
 }
 
+/// Discover hook handlers from the global __zeroclaw_hooks object
+///
+/// Returns a list of (priority, timeout_ms, function) tuples for the given event.
+/// Handlers are discovered dynamically since Function<'js> cannot be stored
+/// across different invocations of ctx.with().
+#[cfg(feature = "js-runtime")]
+fn discover_hook_handlers<'js>(
+    ctx: &Ctx<'js>,
+    event_name: &str,
+) -> Result<Vec<(i32, u64, Function<'js>)>, JsRuntimeError> {
+    let mut handlers = Vec::new();
+
+    // Get the global __zeroclaw_hooks object
+    let global = ctx.globals();
+
+    let hooks_obj: Option<Object> = global
+        .get("__zeroclaw_hooks")
+        .map_err(|e| JsRuntimeError::Execution(format!("Failed to get __zeroclaw_hooks: {}", e)))?;
+
+    if let Some(hooks_obj) = hooks_obj {
+        // Get the handlers array for this specific event
+        let handlers_array: Option<Array> = hooks_obj.get(event_name).map_err(|e| {
+            JsRuntimeError::Execution(format!(
+                "Failed to get handlers for '{}': {}",
+                event_name, e
+            ))
+        })?;
+
+        if let Some(handlers_array) = handlers_array {
+            let len = handlers_array.len();
+
+            for i in 0..len {
+                match handlers_array.get::<_, Function>(i) {
+                    Ok(func) => {
+                        // Default priority 50, timeout 5000ms
+                        // In the future, these could be stored as function properties
+                        handlers.push((50, 5000, func));
+                    }
+                    Err(e) => {
+                        tracing::warn!(
+                            "Handler at index {} for event '{}' is not a function: {}",
+                            i,
+                            event_name,
+                            e
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    // Sort by priority descending (higher priority runs first)
+    handlers.sort_by_key(|h| std::cmp::Reverse(h.0));
+
+    Ok(handlers)
+}
+
+/// Execute a single hook handler with timeout
+///
+/// Calls the JavaScript function with the event payload as JSON.
+/// Returns the hook result based on what the handler returns.
+#[cfg(feature = "js-runtime")]
+fn execute_single_hook<'js>(
+    ctx: &Ctx<'js>,
+    handler: Function<'js>,
+    event_json: &Value,
+    timeout: Duration,
+    deadline: &Arc<Mutex<Option<Instant>>>,
+) -> Result<HookResult, JsRuntimeError> {
+    // Set the deadline for this handler
+    let handler_deadline = Instant::now() + timeout;
+    if let Ok(mut d) = deadline.lock() {
+        *d = Some(handler_deadline);
+    }
+
+    // Parse the event JSON into a JavaScript value
+    let event_value = json_to_js_value(ctx, event_json)
+        .map_err(|e| JsRuntimeError::Execution(format!("Failed to convert event to JS: {}", e)))?;
+
+    // Call the handler with the event as argument
+    let result = match handler.call((event_value,)) {
+        Ok(ret_val) => {
+            // Convert return value to HookResult
+            let ret_json = simple_value_to_json(ctx, &ret_val);
+
+            // Check if the handler returned a hook result object
+            // Format: { type: "veto" | "modified" | "observation", reason?: string, data?: any }
+            if let Some(obj) = ret_json.as_object() {
+                if let Some(result_type) = obj.get("type").and_then(|v| v.as_str()) {
+                    match result_type {
+                        "veto" => {
+                            let reason = obj
+                                .get("reason")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("Hook vetoed the operation");
+                            Ok(HookResult::Veto(reason.to_string()))
+                        }
+                        "modified" => {
+                            let data = obj.get("data").cloned().unwrap_or(Value::Null);
+                            Ok(HookResult::Modified(data))
+                        }
+                        "observation" | _ => Ok(HookResult::Observation),
+                    }
+                } else {
+                    // No type specified, assume observation
+                    Ok(HookResult::Observation)
+                }
+            } else {
+                // Non-object return, assume observation
+                Ok(HookResult::Observation)
+            }
+        }
+        Err(e) => {
+            // Handler threw an error or execution failed
+            // Return Veto with error message
+            Ok(HookResult::Veto(format!("Hook execution failed: {}", e)))
+        }
+    };
+
+    // Clear the deadline after execution
+    if let Ok(mut d) = deadline.lock() {
+        *d = None;
+    }
+
+    result
+}
+
+/// Convert serde_json::Value to rquickjs Value
+#[cfg(feature = "js-runtime")]
+fn json_to_js_value<'js>(
+    ctx: &Ctx<'js>,
+    v: &Value,
+) -> Result<rquickjs::Value<'js>, rquickjs::Error> {
+    match v {
+        Value::Null => rquickjs::Value::new(ctx, rquickjs::JsNull::new()),
+        Value::Bool(b) => rquickjs::Value::new(ctx, *b),
+        Value::Number(n) => {
+            if let Some(i) = n.as_i64() {
+                rquickjs::Value::new(ctx, i)
+            } else if let Some(f) = n.as_f64() {
+                rquickjs::Value::new(ctx, f)
+            } else {
+                rquickjs::Value::new(ctx, rquickjs::JsNull::new())
+            }
+        }
+        Value::String(s) => rquickjs::Value::new(ctx, s.as_str()),
+        Value::Array(arr) => {
+            let js_array = Array::new(ctx)?;
+            for (i, elem) in arr.iter().enumerate() {
+                let js_val = json_to_js_value(ctx, elem)?;
+                js_array.set(i, js_val)?;
+            }
+            Ok(js_array.into())
+        }
+        Value::Object(obj) => {
+            let js_obj = Object::new(ctx)?;
+            for (key, val) in obj.iter() {
+                let js_val = json_to_js_value(ctx, val)?;
+                js_obj.set(key, js_val)?;
+            }
+            Ok(js_obj.into())
+        }
+    }
+}
+
 /// Execute hook handlers for an event
 ///
-/// This is a stub implementation that returns Observation for now.
-/// Actual hook execution will be implemented in a later task (Task 13).
+/// For each handler registered for this event:
+/// 1. Serialize the event to JSON
+/// 2. Call the handler with the event as argument
+/// 3. Apply per-handler timeout
+/// 4. Return early on Veto, otherwise continue to next handler
+///
+/// Returns the first non-observation result (Veto or Modified).
+/// If all handlers return observation, returns Observation.
 #[cfg(feature = "js-runtime")]
 fn execute_hooks<'js>(
-    _ctx: &rquickjs::Ctx<'js>,
+    ctx: &Ctx<'js>,
     event: &Event,
-    handlers: Vec<HookHandlerRef>,
+    _handler_refs: Vec<HookHandlerRef>,
+    _timeout: Duration,
+    deadline: &Arc<Mutex<Option<Instant>>>,
 ) -> HookResult {
-    // For now, return Observation (fire-and-forget)
-    // We'll implement actual hook execution in a later task
+    let event_name = event.name();
+
+    // Serialize the event to JSON
+    let event_json = match serde_json::to_value(event) {
+        Ok(v) => v,
+        Err(e) => {
+            tracing::error!("Failed to serialize event '{}': {}", event_name, e);
+            return HookResult::Veto(format!("Event serialization failed: {}", e));
+        }
+    };
+
+    // Discover handlers from the global __zeroclaw_hooks object
+    let handlers = match discover_hook_handlers(ctx, &event_name) {
+        Ok(h) => h,
+        Err(e) => {
+            tracing::error!("Failed to discover handlers for '{}': {}", event_name, e);
+            return HookResult::Veto(format!("Hook discovery failed: {}", e));
+        }
+    };
+
     tracing::debug!(
         "Executing {} handlers for event: {}",
         handlers.len(),
-        event.name()
+        event_name
     );
+
+    // Execute each handler in priority order
+    for (priority, timeout_ms, func) in handlers {
+        tracing::trace!(
+            "Executing handler for '{}' with priority {}, timeout {}ms",
+            event_name,
+            priority,
+            timeout_ms
+        );
+
+        let timeout = Duration::from_millis(timeout_ms);
+        match execute_single_hook(ctx, func, &event_json, timeout, deadline) {
+            Ok(HookResult::Veto(reason)) => {
+                tracing::debug!("Handler vetoed event '{}': {}", event_name, reason);
+                return HookResult::Veto(reason);
+            }
+            Ok(HookResult::Modified(data)) => {
+                tracing::debug!(
+                    "Handler modified event '{}': data={}",
+                    event_name,
+                    serde_json::to_string(&data).unwrap_or_else(|_| "<invalid>".to_string())
+                );
+                return HookResult::Modified(data);
+            }
+            Ok(HookResult::Observation) => {
+                // Continue to next handler
+                tracing::trace!("Handler for '{}' returned observation", event_name);
+            }
+            Err(e) => {
+                tracing::error!("Handler execution failed for '{}': {}", event_name, e);
+                return HookResult::Veto(format!("Handler error: {}", e));
+            }
+        }
+    }
+
+    // All handlers returned observation
     HookResult::Observation
 }
 
@@ -270,7 +503,6 @@ mod tests {
 
     #[test]
     fn type_conversion_handles_null() {
-        // Test that null is converted correctly
         let result = serde_json::json!(null);
         assert_eq!(result, Value::Null);
     }
@@ -317,11 +549,35 @@ mod tests {
     fn type_conversion_handles_nested_structures() {
         let result = serde_json::json!({
             "users": [
-                {"name": "Alice", "age": 30},
-                {"name": "Bob", "age": 25}
+                {"name": "user_a", "age": 30},
+                {"name": "user_b", "age": 25}
             ]
         });
         assert!(result.is_object());
         assert!(result["users"].is_array());
+    }
+
+    #[test]
+    fn hook_result_observation() {
+        let result = HookResult::Observation;
+        assert!(result.is_observation());
+        assert!(!result.is_veto());
+        assert!(!result.is_modified());
+    }
+
+    #[test]
+    fn hook_result_veto() {
+        let result = HookResult::Veto("test reason".to_string());
+        assert!(!result.is_observation());
+        assert!(result.is_veto());
+        assert!(!result.is_modified());
+    }
+
+    #[test]
+    fn hook_result_modified() {
+        let result = HookResult::Modified(Value::String("modified".to_string()));
+        assert!(!result.is_observation());
+        assert!(!result.is_veto());
+        assert!(result.is_modified());
     }
 }
