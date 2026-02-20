@@ -5,6 +5,8 @@
 
 mod bus;
 mod event;
+mod observer;
 
 pub use bus::{EventBus, EventReceiver, EventSender};
 pub use event::Event;
+pub use observer::PluginEventObserver;
