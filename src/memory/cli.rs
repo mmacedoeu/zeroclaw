@@ -6,7 +6,9 @@ use super::{
     MemoryBackendKind,
 };
 use crate::config::Config;
-use anyhow::{bail, Context, Result};
+#[cfg(feature = "memory-postgres")]
+use anyhow::Context;
+use anyhow::{bail, Result};
 use console::style;
 
 /// Handle `zeroclaw memory <subcommand>` CLI commands.

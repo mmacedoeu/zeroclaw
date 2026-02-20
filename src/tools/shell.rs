@@ -125,13 +125,23 @@ impl Tool for ShellTool {
                 let mut stdout = String::from_utf8_lossy(&output.stdout).to_string();
                 let mut stderr = String::from_utf8_lossy(&output.stderr).to_string();
 
-                // Truncate output to prevent OOM
+                // Truncate output to prevent OOM (ensure we don't cut a UTF-8 character)
                 if stdout.len() > MAX_OUTPUT_BYTES {
-                    stdout.truncate(stdout.floor_char_boundary(MAX_OUTPUT_BYTES));
+                    let safe_bound = stdout
+                        .char_indices()
+                        .map(|(i, _)| i)
+                        .find(|&i| i > MAX_OUTPUT_BYTES)
+                        .unwrap_or(stdout.len());
+                    stdout.truncate(safe_bound);
                     stdout.push_str("\n... [output truncated at 1MB]");
                 }
                 if stderr.len() > MAX_OUTPUT_BYTES {
-                    stderr.truncate(stderr.floor_char_boundary(MAX_OUTPUT_BYTES));
+                    let safe_bound = stderr
+                        .char_indices()
+                        .map(|(i, _)| i)
+                        .find(|&i| i > MAX_OUTPUT_BYTES)
+                        .unwrap_or(stderr.len());
+                    stderr.truncate(safe_bound);
                     stderr.push_str("\n... [stderr truncated at 1MB]");
                 }
 
