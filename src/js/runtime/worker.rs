@@ -137,11 +137,13 @@ fn run_worker_internal(id: usize, mut rx: mpsc::Receiver<WorkerCommand>, config:
             WorkerCommand::ExecuteHook {
                 event,
                 handlers,
-                timeout: _,
+                timeout: _timeout,  // TODO: Apply per-handler timeout in Task 13
                 reply,
             } => {
                 let result = ctx.with(|ctx| execute_hooks(&ctx, &event, handlers));
-                let _ = reply.send(result);
+                if let Err(e) = reply.send(result) {
+                    tracing::warn!("Failed to send hook execution result: {}", e);
+                }
             }
 
             WorkerCommand::Shutdown => break,

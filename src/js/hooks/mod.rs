@@ -81,10 +81,17 @@ impl HookResult {
 ///
 /// This type is used when sending hook execution requests across channels
 /// to worker threads. It contains the metadata needed to execute a hook
-/// without carrying the actual Function across thread boundaries.
+/// without carrying the actual Function across thread boundaries (which is
+/// impossible because Function<'js> is !Send).
 ///
-/// The actual Function is looked up in the worker's own HookRegistry
-/// using the plugin_id and handler_index.
+/// The worker maintains its own HookRegistry with full HookHandler instances
+/// (including the Function). When ExecuteHook is received, the worker looks
+/// up handlers by event name in its local registry.
+///
+/// # Fields
+///
+/// * `priority` - Used for sorting handlers before execution
+/// * `timeout_ms` - Maximum time to wait for this handler to complete
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HookHandlerRef {
     /// Priority (higher = runs earlier)
