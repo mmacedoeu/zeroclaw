@@ -1,4 +1,6 @@
 use super::traits::{Memory, MemoryCategory};
+#[cfg(feature = "memory-postgres")]
+use super::PostgresMemory;
 use super::{
     classify_memory_backend, create_memory_for_migration, effective_memory_backend_name,
     MemoryBackendKind,
@@ -40,18 +42,25 @@ fn create_cli_memory(config: &Config) -> Result<Box<dyn Memory>> {
             bail!("Memory backend is 'none' (disabled). No entries to manage.");
         }
         MemoryBackendKind::Postgres => {
-            let sp = &config.storage.provider.config;
-            let db_url = sp
-                .db_url
-                .as_deref()
-                .map(str::trim)
-                .filter(|v| !v.is_empty())
-                .context(
-                    "memory backend 'postgres' requires db_url in [storage.provider.config]",
-                )?;
-            let mem =
-                super::PostgresMemory::new(db_url, &sp.schema, &sp.table, sp.connect_timeout_secs)?;
-            Ok(Box::new(mem))
+            #[cfg(feature = "memory-postgres")]
+            {
+                let sp = &config.storage.provider.config;
+                let db_url = sp
+                    .db_url
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|v| !v.is_empty())
+                    .context(
+                        "memory backend 'postgres' requires db_url in [storage.provider.config]",
+                    )?;
+                let mem =
+                    PostgresMemory::new(db_url, &sp.schema, &sp.table, sp.connect_timeout_secs)?;
+                Ok(Box::new(mem))
+            }
+            #[cfg(not(feature = "memory-postgres"))]
+            {
+                bail!("memory backend 'postgres' requires 'memory-postgres' feature to be enabled")
+            }
         }
         _ => create_memory_for_migration(&backend, &config.workspace_dir),
     }

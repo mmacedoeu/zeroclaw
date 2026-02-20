@@ -192,7 +192,10 @@ mod tests {
             .push((priority, timeout_ms));
     }
 
-    fn test_get_handlers(hooks: &TestRegistry, event_name: &str) -> Vec<(String, usize, Vec<(i32, u64)>)> {
+    fn test_get_handlers(
+        hooks: &TestRegistry,
+        event_name: &str,
+    ) -> Vec<(String, usize, Vec<(i32, u64)>)> {
         let mut result = Vec::new();
         for (plugin_id, (worker_id, handlers)) in hooks {
             if let Some(handlers) = handlers.get(event_name) {
@@ -458,7 +461,11 @@ mod tests {
     fn has_hooks_for_returns_false_when_plugin_not_found() {
         let hooks = TestRegistry::new();
 
-        assert!(!test_has_hooks_for(&hooks, "nonexistent", "message.received"));
+        assert!(!test_has_hooks_for(
+            &hooks,
+            "nonexistent",
+            "message.received"
+        ));
     }
 
     #[test]

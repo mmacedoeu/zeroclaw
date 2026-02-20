@@ -98,28 +98,25 @@ impl JsSessionBridge {
     ///
     /// Ok(()) if the message was sent successfully
     pub async fn reply(&self, content: &str) -> Result<(), JsPluginError> {
-        let channel = self
-            .channel
-            .as_ref()
-            .ok_or_else(|| JsPluginError::Runtime(crate::js::error::JsRuntimeError::Execution(
+        let channel = self.channel.as_ref().ok_or_else(|| {
+            JsPluginError::Runtime(crate::js::error::JsRuntimeError::Execution(
                 "Channel not set for this session".to_string(),
-            )))?;
+            ))
+        })?;
 
-        let channel_id = self
-            .channel_id
-            .as_ref()
-            .ok_or_else(|| JsPluginError::Runtime(crate::js::error::JsRuntimeError::Execution(
+        let channel_id = self.channel_id.as_ref().ok_or_else(|| {
+            JsPluginError::Runtime(crate::js::error::JsRuntimeError::Execution(
                 "Channel ID not set for this session".to_string(),
-            )))?;
+            ))
+        })?;
 
         let message = SendMessage::new(content, channel_id);
-        channel
-            .send(&message)
-            .await
-            .map_err(|e| JsPluginError::Runtime(crate::js::error::JsRuntimeError::Execution(format!(
+        channel.send(&message).await.map_err(|e| {
+            JsPluginError::Runtime(crate::js::error::JsRuntimeError::Execution(format!(
                 "Failed to send message: {}",
                 e
-            ))))
+            )))
+        })
     }
 
     /// Start typing indicator
@@ -127,27 +124,24 @@ impl JsSessionBridge {
     /// Signals that the bot is processing a response.
     /// Requires a channel to be set via with_channel().
     pub async fn start_typing(&self) -> Result<(), JsPluginError> {
-        let channel = self
-            .channel
-            .as_ref()
-            .ok_or_else(|| JsPluginError::Runtime(crate::js::error::JsRuntimeError::Execution(
+        let channel = self.channel.as_ref().ok_or_else(|| {
+            JsPluginError::Runtime(crate::js::error::JsRuntimeError::Execution(
                 "Channel not set for this session".to_string(),
-            )))?;
+            ))
+        })?;
 
-        let channel_id = self
-            .channel_id
-            .as_ref()
-            .ok_or_else(|| JsPluginError::Runtime(crate::js::error::JsRuntimeError::Execution(
+        let channel_id = self.channel_id.as_ref().ok_or_else(|| {
+            JsPluginError::Runtime(crate::js::error::JsRuntimeError::Execution(
                 "Channel ID not set for this session".to_string(),
-            )))?;
+            ))
+        })?;
 
-        channel
-            .start_typing(channel_id)
-            .await
-            .map_err(|e| JsPluginError::Runtime(crate::js::error::JsRuntimeError::Execution(format!(
+        channel.start_typing(channel_id).await.map_err(|e| {
+            JsPluginError::Runtime(crate::js::error::JsRuntimeError::Execution(format!(
                 "Failed to start typing: {}",
                 e
-            ))))
+            )))
+        })
     }
 
     /// Stop typing indicator
@@ -155,27 +149,24 @@ impl JsSessionBridge {
     /// Stops any active typing indicator.
     /// Requires a channel to be set via with_channel().
     pub async fn stop_typing(&self) -> Result<(), JsPluginError> {
-        let channel = self
-            .channel
-            .as_ref()
-            .ok_or_else(|| JsPluginError::Runtime(crate::js::error::JsRuntimeError::Execution(
+        let channel = self.channel.as_ref().ok_or_else(|| {
+            JsPluginError::Runtime(crate::js::error::JsRuntimeError::Execution(
                 "Channel not set for this session".to_string(),
-            )))?;
+            ))
+        })?;
 
-        let channel_id = self
-            .channel_id
-            .as_ref()
-            .ok_or_else(|| JsPluginError::Runtime(crate::js::error::JsRuntimeError::Execution(
+        let channel_id = self.channel_id.as_ref().ok_or_else(|| {
+            JsPluginError::Runtime(crate::js::error::JsRuntimeError::Execution(
                 "Channel ID not set for this session".to_string(),
-            )))?;
+            ))
+        })?;
 
-        channel
-            .stop_typing(channel_id)
-            .await
-            .map_err(|e| JsPluginError::Runtime(crate::js::error::JsRuntimeError::Execution(format!(
+        channel.stop_typing(channel_id).await.map_err(|e| {
+            JsPluginError::Runtime(crate::js::error::JsRuntimeError::Execution(format!(
                 "Failed to stop typing: {}",
                 e
-            ))))
+            )))
+        })
     }
 
     /// Execute a function with typing indicator
@@ -241,7 +232,12 @@ impl JsSessionBridge {
             .map_err(|e| JsPluginError::Memory(format!("JSON serialize failed: {}", e)))?;
 
         memory
-            .store(&namespaced, &content, MemoryCategory::Conversation, Some(&self.session_id))
+            .store(
+                &namespaced,
+                &content,
+                MemoryCategory::Conversation,
+                Some(&self.session_id),
+            )
             .await
             .map_err(|e| JsPluginError::Memory(format!("Set failed: {}", e)))
     }
@@ -270,7 +266,9 @@ impl JsSessionBridge {
 /// Mock Memory backend for testing
 #[cfg(test)]
 pub struct MockMemory {
-    data: std::sync::Arc<std::sync::Mutex<std::collections::HashMap<String, crate::memory::MemoryEntry>>>,
+    data: std::sync::Arc<
+        std::sync::Mutex<std::collections::HashMap<String, crate::memory::MemoryEntry>>,
+    >,
 }
 
 #[cfg(test)]

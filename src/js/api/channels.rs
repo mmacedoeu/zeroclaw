@@ -64,9 +64,9 @@ impl JsChannelsBridge {
         content: &str,
         recipient: &str,
     ) -> Result<(), JsPluginError> {
-        let channel = self
-            .get_channel(channel_name)
-            .ok_or_else(|| JsPluginError::Channel(format!("Channel not found: {}", channel_name)))?;
+        let channel = self.get_channel(channel_name).ok_or_else(|| {
+            JsPluginError::Channel(format!("Channel not found: {}", channel_name))
+        })?;
 
         let message = SendMessage::new(content, recipient);
         channel
@@ -90,9 +90,9 @@ impl JsChannelsBridge {
         recipient: &str,
         subject: Option<&str>,
     ) -> Result<(), JsPluginError> {
-        let channel = self
-            .get_channel(channel_name)
-            .ok_or_else(|| JsPluginError::Channel(format!("Channel not found: {}", channel_name)))?;
+        let channel = self.get_channel(channel_name).ok_or_else(|| {
+            JsPluginError::Channel(format!("Channel not found: {}", channel_name))
+        })?;
 
         let message = if let Some(subj) = subject {
             SendMessage::with_subject(content, recipient, subj)
@@ -212,7 +212,8 @@ mod tests {
     #[tokio::test]
     async fn channels_bridge_get_channel() {
         let mock_channel = Arc::new(MockChannel::new("test-channel")) as Arc<dyn Channel>;
-        let bridge = JsChannelsBridge::new(vec![("test-channel".to_string(), mock_channel.clone())]);
+        let bridge =
+            JsChannelsBridge::new(vec![("test-channel".to_string(), mock_channel.clone())]);
 
         let retrieved = bridge.get_channel("test-channel");
         assert!(retrieved.is_some());

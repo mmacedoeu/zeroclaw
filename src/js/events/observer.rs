@@ -47,20 +47,18 @@ impl PluginEventObserver {
     /// | `ToolCallStart` | `ToolCallPre` |
     fn convert_event(&self, observer_event: &ObserverEvent) -> Option<crate::js::events::Event> {
         match observer_event {
-            ObserverEvent::ToolCallStart { tool } => {
-                Some(crate::js::events::Event::ToolCallPre {
-                    tool_name: tool.clone(),
-                    input: serde_json::Value::Null,
-                    session_id: None,
-                })
-            }
+            ObserverEvent::ToolCallStart { tool } => Some(crate::js::events::Event::ToolCallPre {
+                tool_name: tool.clone(),
+                input: serde_json::Value::Null,
+                session_id: None,
+            }),
 
             ObserverEvent::AgentStart { provider, model } => {
                 Some(crate::js::events::Event::BeforeAgentStart {
                     config: serde_json::json!({
                         "provider": provider,
                         "model": model
-                    })
+                    }),
                 })
             }
 

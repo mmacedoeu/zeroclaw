@@ -692,7 +692,10 @@ name = "test
 
         let result = manifest.validate();
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("not in permissions.hooks"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("not in permissions.hooks"));
     }
 
     #[test]

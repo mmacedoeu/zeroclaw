@@ -11,6 +11,7 @@ use crate::runtime;
 use crate::security::SecurityPolicy;
 use crate::tools::{self, Tool, ToolSpec};
 use anyhow::Result;
+use futures;
 use std::io::Write as IoWrite;
 use std::sync::Arc;
 use std::time::Instant;

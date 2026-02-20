@@ -7,6 +7,8 @@
 //
 // Run with: cargo test js_hooks_integration --features js-lite -- --test-threads=1
 
+#![cfg(feature = "js")]
+
 use zeroclaw::js::events::{Event, EventBus, PluginEventObserver};
 use zeroclaw::js::hooks::HookRegistry;
 use zeroclaw::js::sandbox::PluginSandbox;
@@ -176,7 +178,11 @@ async fn hook_registry_priority_ordering() {
         .filter(|(p, e, _)| p == "plugin_a" && e == "message.received")
         .collect();
 
-    assert_eq!(plugin_a_handlers.len(), 3, "plugin_a should have 3 handlers");
+    assert_eq!(
+        plugin_a_handlers.len(),
+        3,
+        "plugin_a should have 3 handlers"
+    );
 
     // Verify priorities are what we registered
     let priorities: Vec<_> = plugin_a_handlers.iter().map(|(_, _, p)| *p).collect();
@@ -195,10 +201,17 @@ async fn hook_registry_priority_ordering() {
         .filter(|(_, e, _)| e == "message.received")
         .collect();
 
-    assert_eq!(message_received_handlers.len(), 5, "Should have 5 handlers for message.received");
+    assert_eq!(
+        message_received_handlers.len(),
+        5,
+        "Should have 5 handlers for message.received"
+    );
 
     // Verify the plugin names
-    let plugin_names: Vec<_> = message_received_handlers.iter().map(|(p, _, _)| p.as_str()).collect();
+    let plugin_names: Vec<_> = message_received_handlers
+        .iter()
+        .map(|(p, _, _)| p.as_str())
+        .collect();
     assert!(plugin_names.iter().filter(|&&p| p == "plugin_a").count() == 3);
     assert!(plugin_names.iter().filter(|&&p| p == "plugin_b").count() == 1);
     assert!(plugin_names.iter().filter(|&&p| p == "plugin_c").count() == 1);
@@ -239,7 +252,11 @@ async fn sandbox_event_bus_integration() {
 
     // Get the event bus from the sandbox
     let event_bus = sandbox.event_bus();
-    assert_eq!(Arc::strong_count(event_bus), 1, "Event bus should be referenced once by test");
+    assert_eq!(
+        Arc::strong_count(event_bus),
+        1,
+        "Event bus should be referenced once by test"
+    );
 
     // Create a subscriber
     let mut rx = event_bus.subscribe();
@@ -264,7 +281,10 @@ async fn sandbox_event_bus_integration() {
     assert_eq!(received.name().as_ref(), "session.update");
 
     match received {
-        Event::SessionUpdate { session_id, context } => {
+        Event::SessionUpdate {
+            session_id,
+            context,
+        } => {
             assert_eq!(session_id, "test_session_123");
             assert_eq!(context["user"], "test_user");
             assert_eq!(context["state"], "active");
@@ -470,7 +490,11 @@ async fn custom_event_flow() {
     assert_eq!(received.name().as_ref(), "custom.event.name");
 
     match received {
-        Event::Custom { namespace, name, payload } => {
+        Event::Custom {
+            namespace,
+            name,
+            payload,
+        } => {
             assert_eq!(namespace, "com.example.plugin");
             assert_eq!(name, "custom.event.name");
             assert_eq!(payload["customField"], "customValue");
