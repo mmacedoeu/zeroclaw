@@ -29,6 +29,9 @@ pub enum JsPluginError {
     #[error("Memory error: {0}")]
     Memory(String),
 
+    #[error("Channel error: {0}")]
+    Channel(String),
+
     #[error("I/O error: {0}")]
     Io(#[from] std::io::Error),
 }
