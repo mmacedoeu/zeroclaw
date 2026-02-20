@@ -5,6 +5,8 @@
 
 #[cfg(any(feature = "js", feature = "js-lite", feature = "js-runtime"))]
 pub mod api;
+#[cfg(any(feature = "js", feature = "js-runtime"))]
+pub mod events;
 #[cfg(any(feature = "js", feature = "js-bundle"))]
 pub mod bundle;
 #[cfg(any(feature = "js", feature = "js-runtime", feature = "js-transpile"))]
