@@ -370,7 +370,7 @@ fn json_to_js_value<'js>(
     v: &Value,
 ) -> Result<rquickjs::Value<'js>, rquickjs::Error> {
     match v {
-        Value::Null => rquickjs::Value::new(ctx, rquickjs::JsNull::new()),
+        Value::Null => rquickjs::Value::new(ctx, rquickjs::Null),
         Value::Bool(b) => rquickjs::Value::new(ctx, *b),
         Value::Number(n) => {
             if let Some(i) = n.as_i64() {
@@ -378,7 +378,7 @@ fn json_to_js_value<'js>(
             } else if let Some(f) = n.as_f64() {
                 rquickjs::Value::new(ctx, f)
             } else {
-                rquickjs::Value::new(ctx, rquickjs::JsNull::new())
+                rquickjs::Value::new(ctx, rquickjs::Null)
             }
         }
         Value::String(s) => rquickjs::Value::new(ctx, s.as_str()),
